@@ -63,6 +63,7 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
             persist()
             return None
 
+        # Create borrowing in a pending state - owner must confirm
         borrowing_id = f"borrowing-{len(BUILDING_STATE.get('borrowings', [])) + 1}"
         BUILDING_STATE.setdefault("borrowings", []).append({
             "id": borrowing_id,
@@ -71,19 +72,11 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
             "borrower_id": user_id,
             "start": start,
             "due": due,
-            "status": "active",
+            "status": "waiting_for_confirm",
         })
 
-        # mark item as borrowed
-        item["status"] = "borrowed"
-
-        # update impact (simple constants)
-        BUILDING_STATE["impact"]["borrows_count"] += 1
-        BUILDING_STATE["impact"]["co2_saved_kg"] += constants.IMPACT["CO2_PER_BORROW_KG"]
-        BUILDING_STATE["impact"]["waste_avoided_kg"] += constants.IMPACT["WASTE_PER_BORROW_KG"]
-
         persist()
-        return {"result": "borrow_created", "borrowing_id": borrowing_id}
+        return {"result": "borrow_waiting_confirmation", "borrowing_id": borrowing_id}
 
     # MARK RETURNED
     if action_type == "mark_returned":
@@ -206,6 +199,32 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
         persist()
         return {"result": "item_registered", "item_id": item_id}
 
-    # NOOP or unknown
+
+def confirm_borrowing(owner_id: str, borrowing_id: str):
+    """Confirm a pending borrowing. Only the lender (owner) can confirm.
+
+    This marks borrowing as 'active', sets item.status to 'borrowed', and updates impact.
+    Returns the updated borrowing dict on success, otherwise raises ValueError.
+    """
+    borrowing = _find_borrowing(borrowing_id)
+    if not borrowing:
+        raise ValueError("Borrowing not found")
+    if borrowing.get("lender_id") != owner_id:
+        raise ValueError("Only the lender/owner can confirm this borrowing")
+    if borrowing.get("status") != "waiting_for_confirm":
+        raise ValueError("Borrowing is not waiting for confirmation")
+
+    # mark as active
+    borrowing["status"] = "active"
+    # mark item as borrowed
+    item = _find_item(borrowing.get("item_id"))
+    if item:
+        item["status"] = "borrowed"
+
+    # update impact
+    BUILDING_STATE["impact"]["borrows_count"] += 1
+    BUILDING_STATE["impact"]["co2_saved_kg"] += constants.IMPACT["CO2_PER_BORROW_KG"]
+    BUILDING_STATE["impact"]["waste_avoided_kg"] += constants.IMPACT["WASTE_PER_BORROW_KG"]
+
     persist()
-    return None
+    return borrowing

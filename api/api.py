@@ -1,8 +1,8 @@
 from ai.ai import run_localloop_brain, CHAT_HISTORY
-from domain.actions import apply_action
+from domain.actions import apply_action, confirm_borrowing
 from main import app
 from model.in_memmory_db import BUILDING_STATE
-from model.models import ReturnBorrowingRequest, ChatRequest
+from model.models import ReturnBorrowingRequest, ChatRequest, ConfirmBorrowingRequest
 from fastapi import HTTPException
 
 
@@ -21,6 +21,15 @@ def get_borrowings(user_id: str):
     borrowed = [b for b in BUILDING_STATE.get("borrowings", []) if b.get("borrower_id") == user_id]
     lent = [b for b in BUILDING_STATE.get("borrowings", []) if b.get("lender_id") == user_id]
     return {"borrowed": borrowed, "lent": lent}
+
+
+@app.get("/api/borrowings/pending")
+def get_pending_borrowings(user_id: str):
+
+    pending = [b for b in BUILDING_STATE.get("borrowings", []) if b.get("status") == "waiting_for_confirm"]
+    as_lender = [b for b in pending if b.get("lender_id") == user_id]
+    as_borrower = [b for b in pending if b.get("borrower_id") == user_id]
+    return {"as_lender": as_lender, "as_borrower": as_borrower}
 
 
 @app.get("/api/events")
@@ -73,3 +82,12 @@ def return_borrowing(req: ReturnBorrowingRequest):
             persist()
             return {"status": "ok"}
     raise HTTPException(status_code=404, detail="Borrowing not found")
+
+
+@app.post("/api/borrowings/confirm")
+def confirm_borrowing_endpoint(req: ConfirmBorrowingRequest):
+    try:
+        borrowing = confirm_borrowing(req.owner_id, req.borrowing_id)
+        return {"status": "ok", "borrowing": borrowing}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

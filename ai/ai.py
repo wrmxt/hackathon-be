@@ -10,6 +10,8 @@ from model.in_memmory_db import BUILDING_STATE
 
 # Simple in-memory per-user chat history
 CHAT_HISTORY: dict[str, list[dict]] = {}  # { user_id: [ {"role": "user"/"assistant", "content": "..."}, ... ] }
+# Per-user preferred language (persisted during session)
+CHAT_PREFERRED_LANG: dict[str, str] = {}  # { user_id: 'en'|'sk'|... }
 MAX_HISTORY_TURNS = 6  # keep last N messages (not pairs) to include in the prompt
 
 
@@ -62,7 +64,7 @@ ACTION OBJECTS
         "items": [ {"name": string, "description"?: string, "tags"?: [string,...], "owner_id"?: string } , ... ]
     }
     or the simpler fallback {"categories": [string,...]} (use items when details available)
-  - register_item: {"name": string, "description"?: string, "tags"?: [string,...], "owner_id"?: string, "status"?: "available"|"borrowed"}
+  - register_item: {"name": string, "description"?: string, "tags"?: [string,...], "owner_id": string, "status"?: "available"|"borrowed"}
   - noop: metadata null or {}
 
 WHEN TO RETURN ACTIONS
@@ -226,7 +228,19 @@ def run_localloop_brain(user_id: str, message: str):
             history_lines.append(f"{role.capitalize()}: {text}")
 
         combined_parts = [SYSTEM_PROMPT, f"Building state: {json.dumps(building_context)}"]
-        user_lang = _detect_user_language(message, CHAT_HISTORY.get(user_id, []))
+        # detect user language, prefer stored preference if present
+        stored = CHAT_PREFERRED_LANG.get(user_id)
+        detected = _detect_user_language(message, CHAT_HISTORY.get(user_id, []))
+        # detect user language, prefer stored preference if present
+        stored = CHAT_PREFERRED_LANG.get(user_id)
+        detected = _detect_user_language(message, CHAT_HISTORY.get(user_id, []))
+        # Do not overwrite an existing user preference; set it only once when missing.
+        if not stored and detected:
+            CHAT_PREFERRED_LANG[user_id] = detected
+            user_lang = detected
+        else:
+            user_lang = stored or detected
+
         # map language codes to friendly names the model understands
         lang_names = {
             "en": "English",
@@ -284,8 +298,11 @@ def run_localloop_brain(user_id: str, message: str):
         raise HTTPException(status_code=500, detail=f"AI action must be an object or null: {action}")
 
     # Append the user's message and assistant reply to history, then trim
+    # Strip leading greeting from assistant reply to avoid single-word greetings like 'Cześć!'
+    clean_reply = _strip_leading_greeting(reply)
+
     CHAT_HISTORY.setdefault(user_id, []).append({"role": "user", "content": message})
-    CHAT_HISTORY.setdefault(user_id, []).append({"role": "assistant", "content": reply})
+    CHAT_HISTORY.setdefault(user_id, []).append({"role": "assistant", "content": clean_reply})
     if len(CHAT_HISTORY[user_id]) > MAX_HISTORY_TURNS:
         CHAT_HISTORY[user_id] = CHAT_HISTORY[user_id][-MAX_HISTORY_TURNS:]
 
@@ -295,55 +312,83 @@ def run_localloop_brain(user_id: str, message: str):
     except Exception:
         confidence = None
 
-    # Return structured result
-    return {"intent": intent, "reply": reply, "action": action, "confidence": confidence}
+    # Return structured result (use cleaned reply)
+    return {"intent": intent, "reply": clean_reply, "action": action, "confidence": confidence}
 
 
 def _detect_user_language(message: str, history: list[dict]) -> str:
-    # Merge message + recent history for context
-    text = ((message or "") + " " + " ".join((h.get("content", "") or "") for h in (history or []))).strip()
-    if not text:
+    """Robust language detection for short/multi-step chats.
+
+    Strategy:
+    - If the current message is very short or a common tiny token (e.g., "now", "yes", "no"), prefer the last meaningful user message from history for detection.
+    - Try to use `pycld3`, then `langid`, then `langdetect` if available.
+    - Fallback to a small token/script heuristic.
+    - Default to 'en'.
+    """
+    # find a candidate text to detect: prefer a meaningful recent user message
+    small_tokens = {"now", "yes", "no", "ok", "sure", "ano", "nie"}
+    candidate = (message or "").strip()
+    is_short = len(candidate) <= 3 or candidate.lower() in small_tokens
+
+    if is_short:
+        # look for the last meaningful user message in history
+        for h in reversed(history or []):
+            if h.get("role") == "user":
+                c = (h.get("content", "") or "").strip()
+                if len(c) > 3:
+                    candidate = c
+                    break
+
+    if not candidate:
         return "en"
 
-    # Try to use the `langdetect` library if available (more robust)
+    lower = candidate.lower()
+
+    # 1) pycld3
+    try:
+        import pycld3
+
+        info = pycld3.get_language(candidate)
+        if info and getattr(info, "language", None):
+            return getattr(info, "language").split("-")[0]
+    except Exception:
+        pass
+
+    # 2) langid
+    try:
+        import langid
+
+        code, _ = langid.classify(candidate)
+        if code:
+            return code.split("-")[0]
+    except Exception:
+        pass
+
+    # 3) langdetect
     try:
         from langdetect import detect, DetectorFactory
 
-        # make detection deterministic
         DetectorFactory.seed = 0
-        lang_code = detect(text)
-        # normalise a few variants and prefer two-letter codes we support
-        lang_code = (lang_code or "").lower()
-        simple_map = {
-            "cs": "cs", "sk": "sk", "es": "es", "fr": "fr", "de": "de", "it": "it",
-            "pt": "pt", "pl": "pl", "ru": "ru", "en": "en"
-        }
-        if lang_code in simple_map:
-            return simple_map[lang_code]
-        # langdetect may return variants like 'zh-cn' etc. fall back to prefix
-        if len(lang_code) >= 2:
-            prefix = lang_code.split("-")[0]
-            return simple_map.get(prefix, prefix)
+        lang_code = detect(candidate)
+        if lang_code:
+            return lang_code.split("-")[0]
     except Exception:
-        # fall back to lightweight heuristic below
         pass
 
-    # lightweight heuristic fallback (token + script checks)
-    lower = text.lower()
-    # quick Cyrillic check
+    # 4) lightweight heuristic (script + tokens)
     for ch in lower:
-        if '\u0400' <= ch <= '\u04FF':
+        if "\u0400" <= ch <= "\u04FF":
             return "ru"
 
     lang_tokens = {
-        "sk": ["potreb", "mám", "mam", "ďak", "dak", "prosím", "prosim", "požičať", "vrátil", "vratil"],
-        "cs": ["potřeb", "mám", "mě", "děku", "prosím", "díky"],
-        "es": ["quiero", "por favor", "gracias", "hola", "tengo"],
-        "fr": ["bonjour", "merci", "s'il vous plaît", "salut", "j'ai"],
-        "de": ["hallo", "danke", "bitte", "möchte", "kannst"],
-        # "it": ["ciao", "grazie", "per favore", "ho"],
-        "pt": ["obrigado", "por favor", "preciso", "tenho"],
-        "pl": ["cześć", "dziękuję", "proszę", "chcę"],
+        "sk": ["potreb", "mám", "mam", "ďak", "dak", "prosím", "prosim", "požičať"],
+        "cs": ["potřeb", "děku", "prosím", "díky"],
+        "es": ["quiero", "por favor", "gracias", "hola"],
+        "fr": ["bonjour", "merci", "s'il vous plaît", "salut"],
+        "de": ["hallo", "danke", "bitte"],
+        "it": ["ciao", "grazie"],
+        "pt": ["obrigado", "por favor"],
+        "pl": ["cześć", "dziękuję", "proszę"],
         "en": ["please", "thanks", "hello", "i have", "i want", "can i"],
     }
 
@@ -352,8 +397,51 @@ def _detect_user_language(message: str, history: list[dict]) -> str:
             if tok in lower:
                 return code
 
-    # fallback: if there are many non-ascii characters, assume non-English; else English
-    non_ascii = sum(1 for ch in lower if ord(ch) > 127)
-    if non_ascii > 3:
-        return "en"
     return "en"
+
+
+def _strip_leading_greeting(reply: str) -> str:
+    """Remove a leading greeting sentence in many languages from the reply.
+
+    If the assistant reply starts with a short greeting (e.g. "Hi!", "Cześć!"),
+    remove that leading sentence. If the reply is only a greeting, try to keep
+    the remainder; otherwise preserve original.
+    """
+    import re
+
+    if not reply or not isinstance(reply, str):
+        return reply
+
+    # common greeting tokens across languages
+    greetings = [
+        "hi", "hello", "hey", "ciao", "hola", "bonjour", "hallo", "ahoj",
+        "cześć", "czesc", "dobrý", "dobry", "dobrý deň", "dobry den", "ahoj",
+        "привет", "olá", "ola",
+    ]
+
+    # normalize
+    s = reply.strip()
+    # split into first sentence and the rest
+    parts = re.split(r'(?<=[.!?])\s+', s, maxsplit=1)
+    first = parts[0].strip()
+    rest = parts[1].strip() if len(parts) > 1 else ""
+
+    low = first.lower()
+    for g in greetings:
+        if g in low.split() or low.startswith(g + " ") or low == g or low.startswith(g + "!"):
+            # remove first sentence if there's meaningful rest
+            if rest:
+                return rest
+            # otherwise try to remove only the greeting token from first sentence
+            # remove greeting words and common follow-up like 'how can i help' in various langs
+            cleaned = low
+            for token in greetings:
+                cleaned = re.sub(r'\b' + re.escape(token) + r'\b', '', cleaned)
+            cleaned = re.sub(r'how can i help|jak mog[eę] ci pomoc|ako vam mozem pomoci|ako vam môžem pomôcť|jak vám mohu pomoci', '', cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r'[^\w\s]|_', '', cleaned).strip()
+            if cleaned:
+                # return cleaned (but preserve capitalization roughly)
+                return cleaned
+            # if nothing left, return original reply (avoid empty)
+            return reply
+    return reply

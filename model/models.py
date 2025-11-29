@@ -9,3 +9,6 @@ class ReturnBorrowingRequest(BaseModel):
     borrowing_id: str
 
 
+class ConfirmBorrowingRequest(BaseModel):
+    borrowing_id: str
+    owner_id: str
