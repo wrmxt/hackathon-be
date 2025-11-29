@@ -146,6 +146,36 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
         persist()
         return {"result": "disposal_registered", "created_events": created_events}
 
+    # REGISTER ITEM (new)
+    if action_type == "register_item":
+        # metadata: name (required), description (opt), tags (opt list), status (opt)
+        name = metadata.get("name") or metadata.get("title")
+        description = metadata.get("description") or metadata.get("desc") or ""
+        tags = metadata.get("tags") or metadata.get("categories") or []
+        status = metadata.get("status") or "available"
+        owner_id = metadata.get("owner_id") or user_id
+
+        if not name:
+            persist()
+            return None
+
+        item_id = f"item-{len(BUILDING_STATE.get('items', [])) + 1}"
+        item = {
+            "id": item_id,
+            "name": name,
+            "description": description,
+            "tags": tags,
+            "owner_id": owner_id,
+            "status": status,
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        BUILDING_STATE.setdefault("items", []).append(item)
+        # update simple impact counters (optional)
+        BUILDING_STATE["impact"]["items_shared"] = BUILDING_STATE["impact"].get("items_shared", 0) + 1
+
+        persist()
+        return {"result": "item_registered", "item_id": item_id}
+
     # NOOP or unknown
     persist()
     return None
