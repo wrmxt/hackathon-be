@@ -48,6 +48,10 @@ def post_chat(req: ChatRequest):
     return {"reply": reply, "intent": intent, "confidence": confidence}
 
 
+@app.get("/api/items")
+def get_items():
+    return {"items": BUILDING_STATE.get("items", [])}
+
 @app.post("/api/borrowings/return")
 def return_borrowing(req: ReturnBorrowingRequest):
     # Mark borrowing as returned
