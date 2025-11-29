@@ -22,7 +22,7 @@
       "id": "jana",
       "name": "Jana",
       "floor": 2,
-      "trusted_score": 0.6
+      "trusted_score": 0.7
     }
   ],
   "items": [
@@ -31,10 +31,24 @@
       "name": "Drill",
       "owner_id": "peter",
       "risk_level": "low",
-      "status": "borrowed"
+      "status": "available"
     },
     {
       "id": "item-2",
+      "name": "Drill",
+      "owner_id": "jana",
+      "risk_level": "low",
+      "status": "available"
+    },
+    {
+      "id": "item-3",
+      "name": "Ladder",
+      "owner_id": "anna",
+      "risk_level": "low",
+      "status": "available"
+    },
+    {
+      "id": "item-4",
       "name": "Party set",
       "owner_id": "anna",
       "risk_level": "low",
@@ -44,17 +58,8 @@
   "borrowings": [
     {
       "id": "borrowing-1",
-      "item_id": "item-2",
+      "item_id": "item-4",
       "lender_id": "anna",
-      "borrower_id": "peter",
-      "start": "2025-11-30T16:00:00",
-      "due": "2025-11-30T18:00:00",
-      "status": "active"
-    },
-    {
-      "id": "borrowing-2",
-      "item_id": "item-1",
-      "lender_id": "peter",
       "borrower_id": "peter",
       "start": "2025-11-30T16:00:00",
       "due": "2025-11-30T18:00:00",
@@ -63,9 +68,9 @@
   ],
   "events": [],
   "impact": {
-    "co2_saved_kg": 4.0,
-    "waste_avoided_kg": 2.0,
-    "borrows_count": 2,
+    "co2_saved_kg": 2.0,
+    "waste_avoided_kg": 1.0,
+    "borrows_count": 1,
     "events_count": 0
   }
 }
