@@ -211,7 +211,7 @@ def run_localloop_brain(user_id: str, message: str):
             ],
             temperature=0.2,
             max_output_tokens=800,
-            response_format={"type": "json_object"},
+            # response_format={"type": "json_object"},
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI request failed: {e}")
