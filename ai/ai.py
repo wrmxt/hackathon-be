@@ -226,6 +226,27 @@ def run_localloop_brain(user_id: str, message: str):
             history_lines.append(f"{role.capitalize()}: {text}")
 
         combined_parts = [SYSTEM_PROMPT, f"Building state: {json.dumps(building_context)}"]
+        user_lang = _detect_user_language(message, CHAT_HISTORY.get(user_id, []))
+        # map language codes to friendly names the model understands
+        lang_names = {
+            "en": "English",
+            "sk": "Slovak",
+            "cs": "Czech",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian",
+            "pt": "Portuguese",
+            "pl": "Polish",
+            "ru": "Russian",
+        }
+        lang_label = lang_names.get(user_lang, "English")
+
+        combined_parts = [
+            SYSTEM_PROMPT,
+            f"Building state: {json.dumps(building_context)}",
+            f"Instruction: Please reply in {lang_label}. Use that language for the 'reply' field and mirror user's language when possible.",
+        ]
         if history_lines:
             combined_parts.append("Conversation history:")
             combined_parts.append("\n".join(history_lines))
@@ -235,7 +256,7 @@ def run_localloop_brain(user_id: str, message: str):
         resp = client.responses.create(
             model="gpt-4o-mini",
             input=combined_input,
-            temperature=0.2,
+            temperature=0.5,
             max_output_tokens=800,
             # response_format={"type": "json_object"},
         )
@@ -276,3 +297,63 @@ def run_localloop_brain(user_id: str, message: str):
 
     # Return structured result
     return {"intent": intent, "reply": reply, "action": action, "confidence": confidence}
+
+
+def _detect_user_language(message: str, history: list[dict]) -> str:
+    # Merge message + recent history for context
+    text = ((message or "") + " " + " ".join((h.get("content", "") or "") for h in (history or []))).strip()
+    if not text:
+        return "en"
+
+    # Try to use the `langdetect` library if available (more robust)
+    try:
+        from langdetect import detect, DetectorFactory
+
+        # make detection deterministic
+        DetectorFactory.seed = 0
+        lang_code = detect(text)
+        # normalise a few variants and prefer two-letter codes we support
+        lang_code = (lang_code or "").lower()
+        simple_map = {
+            "cs": "cs", "sk": "sk", "es": "es", "fr": "fr", "de": "de", "it": "it",
+            "pt": "pt", "pl": "pl", "ru": "ru", "en": "en"
+        }
+        if lang_code in simple_map:
+            return simple_map[lang_code]
+        # langdetect may return variants like 'zh-cn' etc. fall back to prefix
+        if len(lang_code) >= 2:
+            prefix = lang_code.split("-")[0]
+            return simple_map.get(prefix, prefix)
+    except Exception:
+        # fall back to lightweight heuristic below
+        pass
+
+    # lightweight heuristic fallback (token + script checks)
+    lower = text.lower()
+    # quick Cyrillic check
+    for ch in lower:
+        if '\u0400' <= ch <= '\u04FF':
+            return "ru"
+
+    lang_tokens = {
+        "sk": ["potreb", "mám", "mam", "ďak", "dak", "prosím", "prosim", "požičať", "vrátil", "vratil"],
+        "cs": ["potřeb", "mám", "mě", "děku", "prosím", "díky"],
+        "es": ["quiero", "por favor", "gracias", "hola", "tengo"],
+        "fr": ["bonjour", "merci", "s'il vous plaît", "salut", "j'ai"],
+        "de": ["hallo", "danke", "bitte", "möchte", "kannst"],
+        # "it": ["ciao", "grazie", "per favore", "ho"],
+        "pt": ["obrigado", "por favor", "preciso", "tenho"],
+        "pl": ["cześć", "dziękuję", "proszę", "chcę"],
+        "en": ["please", "thanks", "hello", "i have", "i want", "can i"],
+    }
+
+    for code, tokens in lang_tokens.items():
+        for tok in tokens:
+            if tok in lower:
+                return code
+
+    # fallback: if there are many non-ascii characters, assume non-English; else English
+    non_ascii = sum(1 for ch in lower if ord(ch) > 127)
+    if non_ascii > 3:
+        return "en"
+    return "en"
