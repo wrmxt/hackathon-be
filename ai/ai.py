@@ -8,6 +8,11 @@ from openai import OpenAI
 from model.in_memmory_db import BUILDING_STATE
 
 
+# Simple in-memory per-user chat history
+CHAT_HISTORY: dict[str, list[dict]] = {}  # { user_id: [ {"role": "user"/"assistant", "content": "..."}, ... ] }
+MAX_HISTORY_TURNS = 6  # keep last N messages (not pairs) to include in the prompt
+
+
 # Don't create the OpenAI client at import time because that will read
 # OPENAI_API_KEY and crash imports if the env var isn't set. Create lazily.
 _client: OpenAI | None = None
@@ -53,27 +58,34 @@ ACTION OBJECTS
 - Allowed action_type values and metadata shapes:
   - create_borrow: {"item_id": string, "lender_id": string, "suggested_start": ISO datetime, "suggested_due": ISO datetime}
   - mark_returned: {"borrowing_id": string}
-  - register_disposal_intent: {"categories": [string, ...]}
+  - register_disposal_intent: either {
+        "items": [ {"name": string, "description"?: string, "tags"?: [string,...], "owner_id"?: string } , ... ]
+    }
+    or the simpler fallback {"categories": [string,...]} (use items when details available)
   - register_item: {"name": string, "description"?: string, "tags"?: [string,...], "owner_id"?: string, "status"?: "available"|"borrowed"}
   - noop: metadata null or {}
 
 WHEN TO RETURN ACTIONS
-- If the user clearly offers an item, do NOT immediately register it without confirmation. Instead:
-  1) If the user's message already includes enough details (name and optional description/tags/availability), you MAY return intent "register_item" and a register_item action with metadata filled.
-  2) If the user only said they have something (e.g. "I have a loudspeaker"), ask a short clarifying question in `reply` requesting optional details you can store: a short description, tags (one-word categories), and whether/when it's available (e.g. "always" or specific dates). In that case, set "action": null so the backend does not auto-register.
-  3) When the user replies with details or explicitly confirms ("yes, add it"), then return intent "register_item" and the register_item action with metadata.
-- If the user clearly asks to borrow and an available item exists, return create_borrow with suggested start/due times.
-- If the user reports a return, return mark_returned when you can identify a borrowing; otherwise ask a clarifying question and set action to null.
-- For disposal/donation requests, return register_disposal_intent with categories extracted (short tags).
-- For informational questions (ask_*), return intent accordingly and action noop.
-- If unsure, ask a clarifying question in reply and set action to null.
+- Disposal flow (important change): When the user says they want to get rid of things, the assistant MUST follow this flow:
+  1) If the user included full details for specific items (name and optional description/tags/owner), the assistant MAY return intent "register_disposal_intent" with metadata.items filled (an array of item objects). But BEFORE returning an action that changes state, the assistant MUST include in `reply` a clear structured summary for each item with fields:
+      - Name: <name>
+      - Description: <desc>
+      - Tags: [tag1, tag2]
+      - Owner: <owner_id or inferred>
+      - Status to store: for_disposal
+     and then ask the user to confirm ("Confirm? yes/no"). Set action to null if confirmation not explicit.
+  2) If the user DID NOT provide details (e.g., they said "I want to get rid of an old sofa"), the assistant MUST ask a short clarifying question requesting the minimal details needed to create an item record: name (if ambiguous), short description, tags/categories, and whether they are the owner. Example question: "Do you want to list this as 'old sofa' to donate? Can you give a short description and confirm you're the owner?"
+  3) When the user replies with the requested details or confirms, then return intent "register_disposal_intent" and action with metadata.items filled (array) containing the provided details. The backend will then create item-shaped disposal entries.
+- For register_item (lending) keep the same confirm/summary behavior as before.
+- For borrow_item/return_item keep existing actions and clarifying behavior.
 
 USING BUILDING STATE
 - Use the building_state provided (items, borrowings, events, disposal_intents, impact, user_id) to decide availability, owners, and to craft replies.
+- When producing summaries, include the fields the backend will store (name, description, tags, owner_id, status) in a concise bulleted list.
 - Prefer short, actionable replies. Use user's language (English or simple Slovak) and mirror phrasing when appropriate.
 
-OUTPUT EXAMPLE
-{"intent":"register_item","reply":"Thanks — can you add a short description and tags (e.g. 'audio', 'party')? When is it available?","action":null,"confidence":0.75}
+OUTPUT EXAMPLE (disposal summary)
+{"intent":"register_disposal_intent","reply":"Summary for disposal:\n- Name: Old sofa\n- Description: 3-seater, fabric, good condition\n- Tags: [furniture,sofa]\n- Owner: peter\nStatus to store: for_disposal\nConfirm?","action":null,"confidence":0.85}
 """
 
 
@@ -194,21 +206,35 @@ def run_localloop_brain(user_id: str, message: str):
         "borrowings": BUILDING_STATE.get("borrowings", []),
         "events": BUILDING_STATE.get("events", []),
         "impact": BUILDING_STATE.get("impact", {}),
+        "disposal_intents": BUILDING_STATE.get("disposal_intents", []),
     }
+
+    # Do not append user's message to history yet (we'll append after a successful AI response)
 
     # Instantiate client lazily (and fail with a clear error if OPENAI_API_KEY missing)
     client = _get_client()
 
     # Build the responses API call payload. We MUST use `input=[...]` and response_format json_object
     try:
+        # Build a single combined text input: system prompt + building state + recent history + current user message
+        history_lines = []
+        for m in CHAT_HISTORY.get(user_id, []):
+            role = m.get("role", "user")
+            text = m.get("content", "")
+            if not text:
+                continue
+            history_lines.append(f"{role.capitalize()}: {text}")
+
+        combined_parts = [SYSTEM_PROMPT, f"Building state: {json.dumps(building_context)}"]
+        if history_lines:
+            combined_parts.append("Conversation history:")
+            combined_parts.append("\n".join(history_lines))
+        combined_parts.append(f"User: {message}")
+        combined_input = "\n\n".join(combined_parts)
+
         resp = client.responses.create(
             model="gpt-4o-mini",
-            # Use structured input items (content as a list of input_text blocks)
-            input=[
-                {"role": "system", "content": [{"type": "input_text", "text": SYSTEM_PROMPT}]},
-                {"role": "system", "content": [{"type": "input_text", "text": f"Building state: {json.dumps(building_context)}"}]},
-                {"role": "user", "content": [{"type": "input_text", "text": message}]},
-            ],
+            input=combined_input,
             temperature=0.2,
             max_output_tokens=800,
             # response_format={"type": "json_object"},
@@ -216,37 +242,8 @@ def run_localloop_brain(user_id: str, message: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI request failed: {e}")
 
-    # Quick direct extraction for common SDK shape (resp.output[0].content[0].text)
-    parsed = None
-    try:
-        outputs = getattr(resp, "output", None)
-        if outputs and len(outputs) > 0:
-            first_out = outputs[0]
-            content = getattr(first_out, "content", None) or (first_out.get("content") if isinstance(first_out, dict) else None)
-            if content and len(content) > 0:
-                first_block = content[0]
-                block_text = None
-                if hasattr(first_block, "text"):
-                    block_text = getattr(first_block, "text")
-                elif isinstance(first_block, dict) and "text" in first_block:
-                    block_text = first_block.get("text")
-                if isinstance(block_text, str) and block_text.strip():
-                    # Try json.loads directly, with a small fallback for escaped strings
-                    try:
-                        parsed = json.loads(block_text)
-                    except Exception:
-                        # Try unescaping common escape sequences then parse
-                        try:
-                            unescaped = bytes(block_text, "utf-8").decode("unicode_escape")
-                            parsed = json.loads(unescaped)
-                        except Exception:
-                            parsed = None
-    except Exception:
-        parsed = None
-
-    # Parse response safely if direct extraction didn't yield parsed JSON
-    if parsed is None:
-        parsed = _safe_json_from_response(resp)
+    # Parse response safely
+    parsed = _safe_json_from_response(resp)
 
     # Validate shape
     if not isinstance(parsed, dict):
@@ -265,6 +262,12 @@ def run_localloop_brain(user_id: str, message: str):
     if action and not isinstance(action, dict):
         raise HTTPException(status_code=500, detail=f"AI action must be an object or null: {action}")
 
+    # Append the user's message and assistant reply to history, then trim
+    CHAT_HISTORY.setdefault(user_id, []).append({"role": "user", "content": message})
+    CHAT_HISTORY.setdefault(user_id, []).append({"role": "assistant", "content": reply})
+    if len(CHAT_HISTORY[user_id]) > MAX_HISTORY_TURNS:
+        CHAT_HISTORY[user_id] = CHAT_HISTORY[user_id][-MAX_HISTORY_TURNS:]
+
     # Provide a default confidence if not present
     try:
         confidence = float(confidence) if confidence is not None else None
@@ -273,4 +276,3 @@ def run_localloop_brain(user_id: str, message: str):
 
     # Return structured result
     return {"intent": intent, "reply": reply, "action": action, "confidence": confidence}
-

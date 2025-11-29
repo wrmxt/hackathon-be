@@ -1,4 +1,4 @@
-from ai.ai import run_localloop_brain
+from ai.ai import run_localloop_brain, CHAT_HISTORY
 from domain.actions import apply_action
 from main import app
 from model.in_memmory_db import BUILDING_STATE
@@ -36,16 +36,21 @@ def post_chat(req: ChatRequest):
     action = brain_result.get("action")
     confidence = brain_result.get("confidence")
 
+    action_result = None
     # Apply action to BUILDING_STATE if present
     if action:
         # Optionally, one could check confidence here; for now we apply all actions returned by the model.
         try:
-            apply_action(req.user_id, intent, action)
+            action_result = apply_action(req.user_id, intent, action)
+            # If the action changed state (backend returned a truthy result), clear the user's chat history
+            if action_result:
+                # remove whole conversation context for this user to avoid accidental reuse
+                CHAT_HISTORY.pop(req.user_id, None)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to apply action: {e}")
     # If no action was returned, simply reply (AI may ask follow-up questions); do not auto-register items.
 
-    return {"reply": reply, "intent": intent, "confidence": confidence}
+    return {"reply": reply, "intent": intent, "confidence": confidence, "action_result": action_result}
 
 
 @app.get("/api/items")

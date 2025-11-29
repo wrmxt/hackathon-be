@@ -110,41 +110,71 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
 
     # REGISTER DISPOSAL INTENT
     if action_type == "register_disposal_intent":
+        items = metadata.get("items")
         categories = metadata.get("categories", [])
-        if not categories:
+
+        if not items and not categories:
             persist()
             return None
 
-        # store intents per user
-        intents_store = BUILDING_STATE.setdefault("disposal_intents", [])
-        intent_id = f"intent-{len(intents_store) + 1}"
-        intents_store.append({
-            "id": intent_id,
-            "user_id": user_id,
-            "categories": categories,
-            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        })
-
-        # Check if any category reached threshold to create an event
+        disposal_store = BUILDING_STATE.setdefault("disposal_intents", [])
+        created_items = []
         created_events = []
-        for cat in categories:
-            # count intents mentioning this category
-            count = sum(1 for it in intents_store if cat in it.get("categories", []))
+
+        # If items provided, create disposal entries from them
+        if items and isinstance(items, list):
+            for it in items:
+                name = it.get("name") or "unnamed"
+                description = it.get("description") or ""
+                tags = it.get("tags") or []
+                owner = it.get("owner_id") or user_id
+                disp_id = f"disposal-{len(disposal_store) + 1}"
+                item_obj = {
+                    "id": disp_id,
+                    "name": name,
+                    "description": description,
+                    "tags": tags,
+                    "owner_id": owner,
+                    "status": "for_disposal",
+                    "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
+                disposal_store.append(item_obj)
+                created_items.append(item_obj)
+
+        # Fallback: if categories provided, create simple disposal entries per category
+        if categories and isinstance(categories, list) and len(categories) > 0:
+            for cat in categories:
+                disp_id = f"disposal-{len(disposal_store) + 1}"
+                item_obj = {
+                    "id": disp_id,
+                    "name": cat if isinstance(cat, str) else str(cat),
+                    "description": "",
+                    "tags": [cat] if isinstance(cat, str) else [],
+                    "owner_id": user_id,
+                    "status": "for_disposal",
+                    "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
+                disposal_store.append(item_obj)
+                created_items.append(item_obj)
+
+        # Check threshold per tag to create events
+        # Build unique tags from created_items
+        tags_to_check = set(tag for it in created_items for tag in (it.get("tags") or []))
+        for tag in tags_to_check:
+            count = sum(1 for it in disposal_store if tag in (it.get("tags") or []))
             if count >= constants.DISPOSAL_INTENT_THRESHOLD:
-                # create a swap/collection event for this category
                 estimated_items = constants.ESTIMATED_ITEMS_PER_INTENT * count
                 co2 = constants.IMPACT["CO2_PER_EVENT_ITEM_KG"] * estimated_items
                 waste = constants.IMPACT["WASTE_PER_EVENT_ITEM_KG"] * estimated_items
-                metadata_event = {"category": cat, "intents_count": count}
+                metadata_event = {"category": tag, "intents_count": count}
                 ev = _create_event("collection", "disposal_intent", metadata_event, co2, waste)
                 created_events.append(ev)
-                # remove intents for that category to avoid duplicate events
-                # (simple approach)
-                BUILDING_STATE["disposal_intents"] = [it for it in intents_store if cat not in it.get("categories", [])]
-                intents_store = BUILDING_STATE["disposal_intents"]
+                # remove disposal intents for that tag
+                BUILDING_STATE["disposal_intents"] = [it for it in disposal_store if tag not in (it.get("tags") or [])]
+                disposal_store = BUILDING_STATE["disposal_intents"]
 
         persist()
-        return {"result": "disposal_registered", "created_events": created_events}
+        return {"result": "disposal_registered", "created_items": created_items, "created_events": created_events}
 
     # REGISTER ITEM (new)
     if action_type == "register_item":
