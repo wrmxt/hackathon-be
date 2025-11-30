@@ -303,3 +303,44 @@ def request_borrowing(req: RequestBorrowingRequest):
 
     persist()
     return {"status": "ok", "borrowing": borrowing}
+
+@app.post("/api/borrowings/request-return")
+def request_return(borrowing_id: str, user_id: str):
+    """Borrower requests return: set status to 'return_requested' if borrowing is active and belongs to the user.
+    """
+    borrowing = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("id") == borrowing_id), None)
+    if not borrowing:
+        raise HTTPException(status_code=404, detail="Borrowing not found")
+
+    if borrowing.get("borrower_id") != user_id:
+        raise HTTPException(status_code=403, detail="Only the borrower can request a return")
+
+    if borrowing.get("status") != "active":
+        raise HTTPException(status_code=400, detail="Only active borrowings can request a return")
+
+    borrowing["status"] = "return_requested"
+    persist()
+    return {"status": "ok", "borrowing": borrowing}
+
+@app.post("/api/borrowings/confirm-return")
+def confirm_return(borrowing_id: str, owner_id: str):
+    """Owner confirms a requested return: set borrowing to 'returned' and item to 'available'.
+    """
+    borrowing = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("id") == borrowing_id), None)
+    if not borrowing:
+        raise HTTPException(status_code=404, detail="Borrowing not found")
+
+    if borrowing.get("lender_id") != owner_id:
+        raise HTTPException(status_code=403, detail="Only the owner can confirm a return")
+
+    if borrowing.get("status") != "return_requested":
+        raise HTTPException(status_code=400, detail="Return must be requested first")
+
+    borrowing["status"] = "returned"
+    # set item available
+    item = next((it for it in BUILDING_STATE.get("items", []) if it.get("id") == borrowing.get("item_id")), None)
+    if item:
+        item["status"] = "available"
+
+    persist()
+    return {"status": "ok", "borrowing": borrowing}

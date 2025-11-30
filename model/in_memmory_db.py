@@ -26,6 +26,7 @@ _BORROW_STATUSES: Set[str] = {
     "active",
     "returned",
     "cancelled",
+    "return_requested",
 }
 _ITEM_STATUSES: Set[str] = {"available", "unavailable", "archived", "borrowed", "requested"}
 
@@ -107,6 +108,9 @@ def _cleanup_state(state: Dict) -> Dict:
         elif any(st == "waiting_for_confirm" for st in statuses):
             # Mark as requested while pending confirmation
             it["status"] = "requested"
+        elif any(st == "return_requested" for st in statuses):
+            # Return requested but item still with borrower; keep as borrowed until owner confirms
+            it["status"] = "borrowed"
         else:
             # if wrongly marked borrowed/requested -> make available
             if it.get("status") in ("borrowed", "requested"):
