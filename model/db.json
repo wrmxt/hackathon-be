@@ -39,13 +39,9 @@
       "id": "item-1",
       "name": "Drill",
       "description": "Cordless drill",
-      "tags": [
-        "tools",
-        "drill",
-        "bigo"
-      ],
+      "tags": ["tools", "drill", "bigo"],
       "owner_id": "peter",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -53,12 +49,9 @@
       "id": "item-2",
       "name": "Drill",
       "description": "Cordless drill",
-      "tags": [
-        "tools",
-        "drill"
-      ],
+      "tags": ["tools", "drill"],
       "owner_id": "jana",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -66,12 +59,9 @@
       "id": "item-3",
       "name": "Ladder",
       "description": "6-step aluminium ladder",
-      "tags": [
-        "tools",
-        "ladder"
-      ],
+      "tags": ["tools", "ladder"],
       "owner_id": "anna",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -79,46 +69,118 @@
       "id": "item-4",
       "name": "Party set",
       "description": "Cups, plates and small decorations for a party",
-      "tags": [
-        "party",
-        "kitchen"
-      ],
+      "tags": ["party", "kitchen"],
       "owner_id": "anna",
       "status": "available",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
     {
+      "id": "item-5",
+      "name": "Fondue set",
+      "description": "Electric fondue set for 6 people",
+      "tags": ["kitchen", "party"],
+      "owner_id": "peter",
+      "status": "borrowed",
+      "created_at": "2025-11-29T21:15:00+00:00",
+      "risk_level": "low"
+    },
+    {
+      "id": "item-6",
+      "name": "Projector",
+      "description": "Full HD projector with HDMI",
+      "tags": ["electronics", "projector"],
+      "owner_id": "jana",
+      "status": "available",
+      "created_at": "2025-11-29T22:00:00+00:00",
+      "risk_level": "medium"
+    },
+    {
       "id": "item-7",
       "name": "Monitor",
       "description": "brand: DELL, size: 24'' 144Hz",
-      "tags": [
-        "electronics"
-      ],
+      "tags": ["electronics"],
       "owner_id": "peter",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-29T20:06:23.384415+00:00"
+    },
+    {
+      "id": "item-8",
+      "name": "Board games set",
+      "description": "Catan, Ticket to Ride, Dixit",
+      "tags": ["games", "party"],
+      "owner_id": "anna",
+      "status": "available",
+      "created_at": "2025-11-30T01:20:00+00:00",
+      "risk_level": "low"
     },
     {
       "id": "item-9",
       "name": "Drill",
       "description": "Cordless drill",
-      "tags": [
-        "tools",
-        "drill"
-      ],
+      "tags": ["tools", "drill"],
       "owner_id": "anna",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-30T02:44:11.203330+00:00"
     },
     {
       "id": "item-10",
       "name": "Bottle",
-      "description": "",
-      "tags": [],
+      "description": "Insulated steel bottle 0.7L",
+      "tags": ["kitchen", "outdoor"],
       "owner_id": "anna",
       "status": "available",
       "created_at": "2025-11-30T02:51:51.373545+00:00"
+    },
+    {
+      "id": "item-11",
+      "name": "Vacuum cleaner",
+      "description": "Bagless vacuum cleaner, 1600W",
+      "tags": ["home", "cleaning"],
+      "owner_id": "peter",
+      "status": "available",
+      "created_at": "2025-11-30T08:30:00+00:00",
+      "risk_level": "low"
+    },
+    {
+      "id": "item-12",
+      "name": "Camping tent",
+      "description": "4-person waterproof tent",
+      "tags": ["outdoor", "camping"],
+      "owner_id": "jana",
+      "status": "borrowed",
+      "created_at": "2025-11-30T09:00:00+00:00",
+      "risk_level": "medium"
+    },
+    {
+      "id": "item-13",
+      "name": "Hammer",
+      "description": "Steel hammer with rubber handle",
+      "tags": ["tools", "hammer"],
+      "owner_id": "peter",
+      "status": "borrowed",
+      "created_at": "2025-11-30T17:30:00+00:00",
+      "risk_level": "low"
+    },
+    {
+      "id": "item-14",
+      "name": "Bike pump",
+      "description": "Floor bike pump with pressure gauge",
+      "tags": ["outdoor", "bike"],
+      "owner_id": "peter",
+      "status": "borrowed",
+      "created_at": "2025-11-30T17:40:00+00:00",
+      "risk_level": "low"
+    },
+    {
+      "id": "item-15",
+      "name": "Air mattress",
+      "description": "Double air mattress with pump",
+      "tags": ["camping", "guest"],
+      "owner_id": "peter",
+      "status": "borrowed",
+      "created_at": "2025-11-30T17:50:00+00:00",
+      "risk_level": "low"
     }
   ],
   "borrowings": [
@@ -127,9 +189,126 @@
       "item_id": "item-3",
       "lender_id": "anna",
       "borrower_id": "jana",
-      "start": "2025-11-30T09:29:42+00:00",
-      "due": "2025-12-01T09:29:42+00:00",
+      "start": "2025-11-29T09:29:42+00:00",
+      "due": "2025-11-30T09:29:42+00:00",
       "status": "returned"
+    },
+    {
+      "id": "borrowing-2",
+      "item_id": "item-3",
+      "lender_id": "anna",
+      "borrower_id": "jana",
+      "start": "2025-11-30T10:18:59+00:00",
+      "due": "2025-12-01T10:18:59+00:00",
+      "status": "returned"
+    },
+    {
+      "id": "borrowing-3",
+      "item_id": "item-1",
+      "lender_id": "peter",
+      "borrower_id": "anna",
+      "start": "2025-11-30T11:00:00+00:00",
+      "due": "2025-12-01T11:00:00+00:00",
+      "status": "returned"
+    },
+    {
+      "id": "borrowing-4",
+      "item_id": "item-2",
+      "lender_id": "jana",
+      "borrower_id": "peter",
+      "start": "2025-11-30T12:00:00+00:00",
+      "due": "2025-12-01T12:00:00+00:00",
+      "status": "active"
+    },
+    {
+      "id": "borrowing-5",
+      "item_id": "item-7",
+      "lender_id": "peter",
+      "borrower_id": "jana",
+      "start": "2025-11-30T13:00:00+00:00",
+      "due": "2025-12-02T13:00:00+00:00",
+      "status": "return_requested"
+    },
+    {
+      "id": "borrowing-6",
+      "item_id": "item-9",
+      "lender_id": "anna",
+      "borrower_id": "peter",
+      "start": "2025-11-30T14:00:00+00:00",
+      "due": "2025-12-01T14:00:00+00:00",
+      "status": "waiting_for_confirm"
+    },
+    {
+      "id": "borrowing-7",
+      "item_id": "item-5",
+      "lender_id": "peter",
+      "borrower_id": "jana",
+      "start": "2025-11-30T15:00:00+00:00",
+      "due": "2025-12-01T23:00:00+00:00",
+      "status": "return_requested"
+    },
+    {
+      "id": "borrowing-8",
+      "item_id": "item-12",
+      "lender_id": "jana",
+      "borrower_id": "anna",
+      "start": "2025-11-30T16:00:00+00:00",
+      "due": "2025-12-03T16:00:00+00:00",
+      "status": "active"
+    },
+    {
+      "id": "borrowing-9",
+      "item_id": "item-8",
+      "lender_id": "anna",
+      "borrower_id": "peter",
+      "start": "2025-11-30T17:00:00+00:00",
+      "due": "2025-11-30T22:00:00+00:00",
+      "status": "cancelled"
+    },
+    {
+      "id": "borrowing-10",
+      "item_id": "item-3",
+      "lender_id": "anna",
+      "borrower_id": "peter",
+      "start": "2025-11-30T18:00:00+00:00",
+      "due": "2025-12-01T18:00:00+00:00",
+      "status": "active"
+    },
+    {
+      "id": "borrowing-11",
+      "item_id": "item-13",
+      "lender_id": "peter",
+      "borrower_id": "anna",
+      "start": "2025-11-30T19:00:00+00:00",
+      "due": "2025-12-01T19:00:00+00:00",
+      "status": "waiting_for_confirm"
+    },
+    {
+      "id": "borrowing-12",
+      "item_id": "item-14",
+      "lender_id": "peter",
+      "borrower_id": "jana",
+      "start": "2025-11-30T19:30:00+00:00",
+      "due": "2025-12-01T19:30:00+00:00",
+      "status": "waiting_for_confirm"
+    },
+    {
+      "id": "borrowing-13",
+      "item_id": "item-15",
+      "lender_id": "peter",
+      "borrower_id": "anna",
+      "start": "2025-11-30T20:00:00+00:00",
+      "due": "2025-12-01T20:00:00+00:00",
+      "status": "waiting_for_confirm"
+    },
+    {
+      "id": "borrowing-14",
+      "item_id": "item-1",
+      "lender_id": "peter",
+      "borrower_id": "jana",
+      "start": "2025-11-30T20:30:00+00:00",
+      "due": "2025-12-01T20:30:00+00:00",
+      "status": "return_requested"
     }
   ],
   "events": [
@@ -174,23 +353,35 @@
         "co2_saved_kg": 9.0,
         "waste_avoided_kg": 3.0
       }
+    },
+    {
+      "id": "event-4",
+      "event_type": "collection",
+      "source": "disposal_intent",
+      "metadata": {
+        "category": "furniture",
+        "intents_count": 2
+      },
+      "created_at": "2025-11-30T10:11:39.128341+00:00",
+      "impact": {
+        "co2_saved_kg": 9.0,
+        "waste_avoided_kg": 3.0
+      }
     }
   ],
   "impact": {
-    "co2_saved_kg": 31.0,
-    "waste_avoided_kg": 11.0,
-    "borrows_count": 2,
-    "events_count": 3,
-    "items_shared": 0
+    "co2_saved_kg": 36.0,
+    "waste_avoided_kg": 12.0,
+    "borrows_count": 14,
+    "events_count": 4,
+    "items_shared": 11
   },
   "disposal_intents": [
     {
       "id": "disposal-1",
       "name": "Set of chairs",
       "description": "4 oak chairs, in good state",
-      "tags": [
-        "furniture"
-      ],
+      "tags": ["furniture"],
       "owner_id": "peter",
       "status": "for_disposal",
       "created_at": "2025-11-29T20:49:54.435289+00:00"
@@ -212,6 +403,15 @@
       "owner_id": "peter",
       "status": "for_disposal",
       "created_at": "2025-11-30T04:04:50.932091+00:00"
+    },
+    {
+      "id": "disposal-4",
+      "name": "Table",
+      "description": "Oak table 100x200x80 cm",
+      "tags": ["furniture"],
+      "owner_id": "peter",
+      "status": "for_disposal",
+      "created_at": "2025-11-30T10:11:39.128322+00:00"
     }
   ]
 }
