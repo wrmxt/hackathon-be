@@ -269,8 +269,8 @@ def run_localloop_brain(user_id: str, message: str):
         resp = client.responses.create(
             model="gpt-4o-mini",
             input=combined_input,
-            temperature=0.5,
-            max_output_tokens=800,
+            temperature=0.9,
+            max_output_tokens=2000,
             # response_format={"type": "json_object"},
         )
     except Exception as e:
@@ -296,6 +296,31 @@ def run_localloop_brain(user_id: str, message: str):
     if action and not isinstance(action, dict):
         raise HTTPException(status_code=500, detail=f"AI action must be an object or null: {action}")
 
+    # Safety: prevent users from borrowing their own items. If the model returned a create_borrow
+    # action where lender_id == user_id, nullify it and append a friendly message in the user's language.
+    if isinstance(action, dict) and action.get("action_type") == "create_borrow":
+        metadata = action.get("metadata") or {}
+        lender = metadata.get("lender_id")
+        # If lender equals the requester, block it
+        if lender == user_id:
+            # localized messages
+            lang = CHAT_PREFERRED_LANG.get(user_id, "en")
+            msgs = {
+                "en": "You cannot borrow your own item — I won't create that request.",
+                "sk": "Nemôžete si požičať svoju vlastnú vec — takýto požiadavok nevytvorím.",
+                "cs": "Nemůžete si půjčit svou vlastní věc — takovou žádost nevytvořím.",
+                "es": "No puedes pedir prestado tu propio artículo — no crearé esa solicitud.",
+                "fr": "Vous ne pouvez pas emprunter votre propre objet — je ne créerai pas cette demande.",
+                "de": "Sie können Ihren eigenen Gegenstand nicht ausleihen — ich erstelle diese Anfrage nicht.",
+                "it": "Non puoi prendere in prestito il tuo stesso oggetto — non creerò questa richiesta.",
+                "pt": "Não pode pedir emprestado o seu próprio item — não vou criar esse pedido.",
+                "pl": "Nie możesz wypożyczyć własnej rzeczy — nie utworzę takiego wniosku.",
+                "ru": "Вы не можете взять в долг свой собственный предмет — я не создам такой запрос.",
+            }
+            note = msgs.get(lang, msgs["en"])
+            reply = ((reply or "").strip() + "\n\n" + note).strip()
+            action = None
+
     # Enforce ownership safety for item registration/disposal intents
     # Default owner_id to the current user; if AI tried to set a different owner, require explicit confirmation.
     confirmation_needed = False
@@ -313,7 +338,7 @@ def run_localloop_brain(user_id: str, message: str):
                     action["metadata"] = metadata
                 elif owner != user_id:
                     # Hard rule: owner cannot be changed via chat; force to current user
-                    ownership_notice = f"Вы залогинены как '{user_id}'. Сменить владельца невозможно — будет установлен текущий аккаунт."
+                    ownership_notice = f"Вы залогинены как '{user_id}'. Сменить владельца nemožno — будет установлен текущий аккаунт."
                     metadata["owner_id"] = user_id
                     action["metadata"] = metadata
         # register_disposal_intent: iterate items
@@ -333,7 +358,7 @@ def run_localloop_brain(user_id: str, message: str):
                         owner_mismatch_found = True
                         it["owner_id"] = user_id
                 if owner_mismatch_found:
-                    ownership_notice = f"Вы залогинены как '{user_id}'. Сменить владельца невозможно — будет установлен текущий аккаунт."
+                    ownership_notice = f"Вы залогинены как '{user_id}'. Сменить владельца nemožno — будет установлен текущий аккаунт."
                 # write back sanitized items
                 if isinstance(metadata, dict):
                     metadata["items"] = items

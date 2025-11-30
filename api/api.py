@@ -2,6 +2,7 @@ from ai.ai import run_localloop_brain, CHAT_HISTORY
 from domain.actions import apply_action, confirm_borrowing
 from main import app
 from model.in_memmory_db import BUILDING_STATE, persist
+from typing import Optional
 from model.models import ReturnBorrowingRequest, ChatRequest, ConfirmBorrowingRequest, UpdateItemRequest, RequestBorrowingRequest
 from fastapi import HTTPException
 
@@ -63,8 +64,28 @@ def post_chat(req: ChatRequest):
 
 
 @app.get("/api/items")
-def get_items():
-    return {"items": BUILDING_STATE.get("items", [])}
+def get_items(user_id: Optional[str] = None, exclude_owner: bool = False):
+    """Return items with optional owner metadata.
+
+    Query params:
+    - user_id: optional; if provided each item will have `is_owner` and `owner_name` fields.
+    - exclude_owner: boolean; if true and user_id provided, items owned by the user are filtered out.
+    """
+    items = BUILDING_STATE.get("items", [])
+    residents = {r.get("id"): r for r in BUILDING_STATE.get("residents", [])}
+
+    enriched = []
+    for item in items:
+        it = dict(item)  # shallow copy
+        owner_id = it.get("owner_id")
+        it["is_owner"] = (user_id is not None and owner_id == user_id)
+        owner = residents.get(owner_id)
+        it["owner_name"] = owner.get("name") if owner else owner_id
+        if exclude_owner and it["is_owner"]:
+            continue
+        enriched.append(it)
+
+    return {"items": enriched}
 
 @app.post("/api/borrowings/return")
 def return_borrowing(req: ReturnBorrowingRequest):

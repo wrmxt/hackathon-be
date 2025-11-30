@@ -63,6 +63,11 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
             persist()
             return None
 
+        # Prevent borrowing your own item
+        if lender_id == user_id:
+            persist()
+            return {"result": "error", "error": "cannot_borrow_own_item", "message": "You cannot borrow your own item."}
+
         # Create borrowing in a pending state - owner must confirm
         borrowing_id = f"borrowing-{len(BUILDING_STATE.get('borrowings', [])) + 1}"
         BUILDING_STATE.setdefault("borrowings", []).append({
