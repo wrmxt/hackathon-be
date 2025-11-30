@@ -39,9 +39,13 @@
       "id": "item-1",
       "name": "Drill",
       "description": "Cordless drill",
-      "tags": ["tools", "drill", "bigo"],
+      "tags": [
+        "tools",
+        "drill",
+        "bigo"
+      ],
       "owner_id": "peter",
-      "status": "borrowed",
+      "status": "available",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -49,9 +53,12 @@
       "id": "item-2",
       "name": "Drill",
       "description": "Cordless drill",
-      "tags": ["tools", "drill"],
+      "tags": [
+        "tools",
+        "drill"
+      ],
       "owner_id": "jana",
-      "status": "borrowed",
+      "status": "available",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -59,9 +66,12 @@
       "id": "item-3",
       "name": "Ladder",
       "description": "6-step aluminium ladder",
-      "tags": ["tools", "ladder"],
+      "tags": [
+        "tools",
+        "ladder"
+      ],
       "owner_id": "anna",
-      "status": "borrowed",
+      "status": "available",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -69,9 +79,12 @@
       "id": "item-4",
       "name": "Party set",
       "description": "Cups, plates and small decorations for a party",
-      "tags": ["party", "kitchen"],
+      "tags": [
+        "party",
+        "kitchen"
+      ],
       "owner_id": "anna",
-      "status": "borrowed",
+      "status": "available",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -79,7 +92,9 @@
       "id": "item-7",
       "name": "Monitor",
       "description": "brand: DELL, size: 24'' 144Hz",
-      "tags": ["electronics"],
+      "tags": [
+        "electronics"
+      ],
       "owner_id": "peter",
       "status": "available",
       "created_at": "2025-11-29T20:06:23.384415+00:00"
@@ -88,7 +103,10 @@
       "id": "item-9",
       "name": "Drill",
       "description": "Cordless drill",
-      "tags": ["tools", "drill"],
+      "tags": [
+        "tools",
+        "drill"
+      ],
       "owner_id": "anna",
       "status": "available",
       "created_at": "2025-11-30T02:44:11.203330+00:00"
@@ -99,7 +117,7 @@
       "description": "",
       "tags": [],
       "owner_id": "anna",
-      "status": "borrowed",
+      "status": "available",
       "created_at": "2025-11-30T02:51:51.373545+00:00"
     }
   ],
@@ -111,7 +129,7 @@
       "borrower_id": "peter",
       "start": "2025-11-30T16:00:00",
       "due": "2025-11-30T18:00:00",
-      "status": "active"
+      "status": "returned"
     },
     {
       "id": "borrowing-2",
@@ -120,7 +138,7 @@
       "borrower_id": "peter",
       "start": "2025-11-30T00:00:00",
       "due": "2025-11-30T23:59:59",
-      "status": "active"
+      "status": "returned"
     },
     {
       "id": "borrowing-3",
@@ -129,7 +147,7 @@
       "borrower_id": "peter",
       "start": "2025-11-30T00:00:00",
       "due": "2025-11-30T23:59:59",
-      "status": "active"
+      "status": "returned"
     },
     {
       "id": "borrowing-4",
@@ -138,7 +156,7 @@
       "borrower_id": "peter",
       "start": "2025-11-30T00:00:00",
       "due": "2025-11-30T23:59:59",
-      "status": "active"
+      "status": "returned"
     },
     {
       "id": "borrowing-5",
@@ -147,7 +165,16 @@
       "borrower_id": "jana",
       "start": "2025-11-30T00:00:00",
       "due": "2025-11-30T23:59:59",
-      "status": "waiting_for_confirm"
+      "status": "returned"
+    },
+    {
+      "id": "borrowing-6",
+      "item_id": "item-9",
+      "lender_id": "anna",
+      "borrower_id": "peter",
+      "start": "2025-11-30T06:09:02.938Z",
+      "due": "2025-12-01T06:09:02.938Z",
+      "status": "returned"
     }
   ],
   "events": [
@@ -195,9 +222,9 @@
     }
   ],
   "impact": {
-    "co2_saved_kg": 27.0,
-    "waste_avoided_kg": 9.0,
-    "borrows_count": 5,
+    "co2_saved_kg": 29.0,
+    "waste_avoided_kg": 10.0,
+    "borrows_count": 6,
     "events_count": 3,
     "items_shared": 5
   },
@@ -206,7 +233,9 @@
       "id": "disposal-1",
       "name": "Set of chairs",
       "description": "4 oak chairs, in good state",
-      "tags": ["furniture"],
+      "tags": [
+        "furniture"
+      ],
       "owner_id": "peter",
       "status": "for_disposal",
       "created_at": "2025-11-29T20:49:54.435289+00:00"
