@@ -58,7 +58,7 @@
         "drill"
       ],
       "owner_id": "jana",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -71,7 +71,7 @@
         "ladder"
       ],
       "owner_id": "anna",
-      "status": "borrowed",
+      "status": "available",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -124,66 +124,12 @@
   "borrowings": [
     {
       "id": "borrowing-1",
-      "item_id": "item-4",
-      "lender_id": "anna",
-      "borrower_id": "peter",
-      "start": "2025-11-30T16:00:00",
-      "due": "2025-11-30T18:00:00",
-      "status": "returned"
-    },
-    {
-      "id": "borrowing-2",
       "item_id": "item-2",
       "lender_id": "jana",
       "borrower_id": "peter",
-      "start": "2025-11-30T00:00:00",
-      "due": "2025-11-30T23:59:59",
-      "status": "returned"
-    },
-    {
-      "id": "borrowing-3",
-      "item_id": "item-3",
-      "lender_id": "anna",
-      "borrower_id": "peter",
-      "start": "2025-11-30T00:00:00",
-      "due": "2025-11-30T23:59:59",
-      "status": "returned"
-    },
-    {
-      "id": "borrowing-4",
-      "item_id": "item-10",
-      "lender_id": "anna",
-      "borrower_id": "peter",
-      "start": "2025-11-30T00:00:00",
-      "due": "2025-11-30T23:59:59",
-      "status": "returned"
-    },
-    {
-      "id": "borrowing-5",
-      "item_id": "item-1",
-      "lender_id": "peter",
-      "borrower_id": "jana",
-      "start": "2025-11-30T00:00:00",
-      "due": "2025-11-30T23:59:59",
-      "status": "returned"
-    },
-    {
-      "id": "borrowing-6",
-      "item_id": "item-9",
-      "lender_id": "anna",
-      "borrower_id": "peter",
-      "start": "2025-11-30T06:09:02.938Z",
-      "due": "2025-12-01T06:09:02.938Z",
-      "status": "returned"
-    },
-    {
-      "id": "borrowing-7",
-      "item_id": "item-3",
-      "lender_id": "anna",
-      "borrower_id": "peter",
-      "start": "2025-11-30T00:00:00",
-      "due": "2025-11-30T23:59:59",
-      "status": "waiting_for_confirm"
+      "start": "2025-11-30T08:13:17+00:00",
+      "due": "2025-12-01T08:13:17+00:00",
+      "status": "active"
     }
   ],
   "events": [
@@ -233,9 +179,9 @@
   "impact": {
     "co2_saved_kg": 29.0,
     "waste_avoided_kg": 10.0,
-    "borrows_count": 6,
+    "borrows_count": 1,
     "events_count": 3,
-    "items_shared": 5
+    "items_shared": 0
   },
   "disposal_intents": [
     {

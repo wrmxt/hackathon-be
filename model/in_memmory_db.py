@@ -27,7 +27,7 @@ _BORROW_STATUSES: Set[str] = {
     "returned",
     "cancelled",
 }
-_ITEM_STATUSES: Set[str] = {"available", "unavailable", "archived", "borrowed"}
+_ITEM_STATUSES: Set[str] = {"available", "unavailable", "archived", "borrowed", "requested"}
 
 
 def _read_raw_state() -> Dict:
@@ -105,11 +105,11 @@ def _cleanup_state(state: Dict) -> Dict:
         if any(st == "active" for st in statuses):
             it["status"] = "borrowed"
         elif any(st == "waiting_for_confirm" for st in statuses):
-            # Consider item reserved/unavailable while waiting
-            it["status"] = "borrowed"
+            # Mark as requested while pending confirmation
+            it["status"] = "requested"
         else:
-            # if wrongly marked borrowed -> make available
-            if it.get("status") == "borrowed":
+            # if wrongly marked borrowed/requested -> make available
+            if it.get("status") in ("borrowed", "requested"):
                 it["status"] = "available"
             elif it.get("status") not in _ITEM_STATUSES:
                 it["status"] = "available"

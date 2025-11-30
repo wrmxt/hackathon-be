@@ -4,6 +4,7 @@ from main import app
 from model.in_memmory_db import BUILDING_STATE, persist
 from typing import Optional
 from model.models import ReturnBorrowingRequest, ChatRequest, ConfirmBorrowingRequest, UpdateItemRequest, RequestBorrowingRequest
+
 from fastapi import HTTPException
 
 
@@ -240,43 +241,65 @@ def delete_item(item_id: str, user_id: str):
 
 @app.post("/api/borrowings/request")
 def request_borrowing(req: RequestBorrowingRequest):
+    """Create a borrow request for an item.
+
+    Rules:
+    - Borrower and item must exist.
+    - Borrower cannot be the owner.
+    - No existing waiting/active borrowing for this item (by anyone) and no duplicate waiting request by same borrower.
+    - Auto-generate start/due timestamps (now and +1 day).
+    - Set item.status = 'requested'.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    # Validate borrower exists
+    borrower = next((r for r in BUILDING_STATE.get("residents", []) if r.get("id") == req.user_id), None)
+    if not borrower:
+        raise HTTPException(status_code=404, detail="Borrower not found")
+
     # Validate item exists
     item = next((it for it in BUILDING_STATE.get("items", []) if it.get("id") == req.item_id), None)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    borrower_id = req.user_id
+
     lender_id = item.get("owner_id")
-    if borrower_id == lender_id:
+    if req.user_id == lender_id:
         raise HTTPException(status_code=400, detail="Cannot borrow your own item")
 
-    # Check existing borrowings for conflicts (active or waiting)
-    conflict = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("item_id") == req.item_id and b.get("status") in ("active", "waiting_for_confirm")), None)
-    if conflict:
-        raise HTTPException(status_code=400, detail="Item already borrowed or pending confirmation")
+    # Block if item already has active or pending borrowing (by anyone)
+    blocking = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("item_id") == req.item_id and b.get("status") in ("active", "waiting_for_confirm")), None)
+    if blocking:
+        raise HTTPException(status_code=400, detail="Item already borrowed or requested")
 
-    # Basic date validation (optional: ensure start <= due)
-    start = req.start
-    due = req.due
-    if start and due and start > due:
-        raise HTTPException(status_code=400, detail="Start must be before due")
+    # Prevent duplicate waiting request by same borrower (extra safety though blocking covers it)
+    dup_same_user = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("item_id") == req.item_id and b.get("borrower_id") == req.user_id and b.get("status") == "waiting_for_confirm"), None)
+    if dup_same_user:
+        raise HTTPException(status_code=400, detail="You have already requested this item")
 
-    # Create borrowing in waiting_for_confirm
+    # Item must be in a requestable state
+    if item.get("status") not in ("available", "unavailable"):
+        raise HTTPException(status_code=400, detail="Item is not requestable right now")
+
+    # Generate start/due
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    start_iso = now.isoformat()
+    due_iso = (now + timedelta(days=1)).isoformat()
+
+    # Create borrowing record
     borrowing_id = f"borrowing-{len(BUILDING_STATE.get('borrowings', [])) + 1}"
     borrowing = {
         "id": borrowing_id,
         "item_id": req.item_id,
         "lender_id": lender_id,
-        "borrower_id": borrower_id,
-        "start": start,
-        "due": due,
+        "borrower_id": req.user_id,
+        "start": start_iso,
+        "due": due_iso,
         "status": "waiting_for_confirm",
     }
     BUILDING_STATE.setdefault("borrowings", []).append(borrowing)
 
-    # Update item status to borrowed (reserved) for consistency
-    prev_status = item.get("status")
-    if prev_status in ("available", "unavailable"):
-        item["status"] = "borrowed"
+    # Update item status to requested
+    item["status"] = "requested"
 
     persist()
     return {"status": "ok", "borrowing": borrowing}

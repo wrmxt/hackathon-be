@@ -26,5 +26,3 @@ class UpdateItemRequest(BaseModel):
 class RequestBorrowingRequest(BaseModel):
     user_id: str  # borrower
     item_id: str
-    start: Optional[str] = None  # ISO datetime string
-    due: Optional[str] = None    # ISO datetime string
