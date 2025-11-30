@@ -14,6 +14,7 @@ def get_building_state():
         "residents": BUILDING_STATE["residents"],
         "items": BUILDING_STATE["items"],
         "impact": BUILDING_STATE["impact"],
+        "disposal_intents": BUILDING_STATE["disposal_intents"],
     }
 
 

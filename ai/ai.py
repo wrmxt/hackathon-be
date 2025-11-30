@@ -17,6 +17,9 @@ CHAT_PREFERRED_LANG: dict[str, str] = {}  # { user_id: 'en'|'sk'|... }
 # Increase history depth to better preserve context across turns
 MAX_HISTORY_TURNS = 20  # keep last N messages (not pairs) to include in the prompt
 
+# Per-user pending actions waiting for user confirmation
+CHAT_PENDING_ACTIONS: dict[str, dict] = {}  # { user_id: action_dict }
+
 
 # Don't create the OpenAI client at import time because that will read
 # OPENAI_API_KEY and crash imports if the env var isn't set. Create lazily.
@@ -269,7 +272,7 @@ def run_localloop_brain(user_id: str, message: str):
         resp = client.responses.create(
             model="gpt-4o-mini",
             input=combined_input,
-            temperature=0.8,
+            temperature=0.7,
             max_output_tokens=2000,
             # response_format={"type": "json_object"},
         )
@@ -374,6 +377,28 @@ def run_localloop_brain(user_id: str, message: str):
         confirm_line = "\n\nOwner will be set to your account ('%s'). Confirm? yes/no" % user_id
         # Preserve original reply but make sure the confirmation is visible
         reply = (reply or "").strip() + confirm_line
+        action = None
+
+    # Check if this is a confirmation message
+    is_confirmation = _is_confirmation_message(message)
+
+    # If the user sent a confirmation message and we have a pending action, return that action
+    pending_action = CHAT_PENDING_ACTIONS.get(user_id)
+    if is_confirmation and pending_action:
+        # Clear the pending action after confirmation
+        CHAT_PENDING_ACTIONS[user_id] = None
+        # Return the stored action so API will apply it
+        return {"intent": "confirm_action", "reply": "Action confirmed.", "action": pending_action, "confidence": 1.0}
+
+    # If the action is not null and no confirmation is needed, store the action as pending
+    if action and not confirmation_needed:
+        # Summarize the action for confirmation
+        action_summary = _action_summary(action, CHAT_PREFERRED_LANG.get(user_id, "en"))
+        # Add to reply before storing as pending
+        reply = ((reply or "").strip() + "\n\n" + action_summary).strip()
+        # Store the action as pending
+        CHAT_PENDING_ACTIONS[user_id] = action
+        # Nullify the action in the response
         action = None
 
     # Append the user's message and assistant reply to history, then trim
@@ -524,3 +549,57 @@ def _strip_leading_greeting(reply: str) -> str:
             # if nothing left, return original reply (avoid empty)
             return reply
     return reply
+
+
+def _is_confirmation_message(message: str) -> bool:
+    if not message:
+        return False
+    m = message.strip().lower()
+    confirm_tokens = {"yes", "yep", "y", "confirm", "ok", "okay", "sure", "ano", "áno", "potvrdiť", "potvrdit", "confirmar"}
+    # Exact or short starts
+    if m in confirm_tokens:
+        return True
+    # common affirmative short replies
+    if m.startswith("yes") or m.startswith("ok") or m.startswith("sure") or m == "confirm":
+        return True
+    return False
+
+
+def _action_summary(action: dict, lang: str = "en") -> str:
+    """Create a short human summary for the provided action to ask for confirmation."""
+    if not isinstance(action, dict):
+        return "" if lang == "en" else ""
+    at = action.get("action_type")
+    md = action.get("metadata") or {}
+    if at == "create_borrow":
+        item_id = md.get("item_id") or md.get("item") or "(item)"
+        lender = md.get("lender_id") or md.get("lender") or "(owner)"
+        start = md.get("suggested_start") or md.get("start") or "asap"
+        due = md.get("suggested_due") or md.get("due") or "unspecified"
+        if lang == "sk":
+            return f"Žiadosť o požičanie položky {item_id} od {lender}, od {start} do {due}."
+        return f"Request to borrow {item_id} from {lender}, from {start} to {due}."
+    if at == "register_item":
+        name = md.get("name") or md.get("title") or "(unnamed)"
+        desc = md.get("description") or md.get("desc") or ""
+        tags = md.get("tags") or []
+        if lang == "sk":
+            return f"Registrovať položku: {name}. Popis: {desc}. Tagy: {tags}."
+        return f"Register item: {name}. Description: {desc}. Tags: {tags}."
+    if at == "register_disposal_intent":
+        items = md.get("items") or []
+        if items:
+            names = ", ".join([it.get("name") or "(unnamed)" for it in items])
+            if lang == "sk":
+                return f"Zaznamenať na zber: {names}."
+            return f"Register for disposal: {names}."
+        cats = md.get("categories") or []
+        if cats:
+            if lang == "sk":
+                return f"Zaznamenať kategorie na zber: {cats}."
+            return f"Register disposal categories: {cats}."
+    # fallback
+    if lang == "sk":
+        return "Navrhovaná akcia, potvrďte prosím."
+    return "Proposed action — please confirm."
+
