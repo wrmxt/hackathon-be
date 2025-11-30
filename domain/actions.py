@@ -120,7 +120,8 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
                 name = it.get("name") or "unnamed"
                 description = it.get("description") or ""
                 tags = it.get("tags") or []
-                owner = it.get("owner_id") or user_id
+                # ENFORCE: always set owner to current user, ignore provided owner_id
+                owner = user_id
                 disp_id = f"disposal-{len(disposal_store) + 1}"
                 item_obj = {
                     "id": disp_id,
@@ -176,7 +177,8 @@ def apply_action(user_id: str, intent: str, action: Optional[dict]):
         description = metadata.get("description") or metadata.get("desc") or ""
         tags = metadata.get("tags") or metadata.get("categories") or []
         status = metadata.get("status") or "available"
-        owner_id = metadata.get("owner_id") or user_id
+        # ENFORCE: owner is always the current user
+        owner_id = user_id
 
         if not name:
             persist()
@@ -211,7 +213,7 @@ def confirm_borrowing(owner_id: str, borrowing_id: str):
         raise ValueError("Borrowing not found")
     if borrowing.get("lender_id") != owner_id:
         raise ValueError("Only the lender/owner can confirm this borrowing")
-    if borrowing.get("status") != "waiting_for_confirm":
+    if borrowing.get("status") != "waiting_for_confirmation" and borrowing.get("status") != "waiting_for_confirm":
         raise ValueError("Borrowing is not waiting for confirmation")
 
     # mark as active

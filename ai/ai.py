@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from openai import OpenAI
@@ -14,12 +14,13 @@ from model.in_memmory_db import BUILDING_STATE
 CHAT_HISTORY: dict[str, list[dict]] = {}  # { user_id: [ {"role": "user"/"assistant", "content": "..."}, ... ] }
 # Per-user preferred language (persisted during session)
 CHAT_PREFERRED_LANG: dict[str, str] = {}  # { user_id: 'en'|'sk'|... }
-MAX_HISTORY_TURNS = 6  # keep last N messages (not pairs) to include in the prompt
+# Increase history depth to better preserve context across turns
+MAX_HISTORY_TURNS = 20  # keep last N messages (not pairs) to include in the prompt
 
 
 # Don't create the OpenAI client at import time because that will read
 # OPENAI_API_KEY and crash imports if the env var isn't set. Create lazily.
-_client: OpenAI | None = None
+_client: Optional[OpenAI] = None
 
 
 def _get_client() -> OpenAI:
@@ -229,10 +230,6 @@ def run_localloop_brain(user_id: str, message: str):
                 continue
             history_lines.append(f"{role.capitalize()}: {text}")
 
-        combined_parts = [SYSTEM_PROMPT, f"Building state: {json.dumps(building_context)}"]
-        # detect user language, prefer stored preference if present
-        stored = CHAT_PREFERRED_LANG.get(user_id)
-        detected = _detect_user_language(message, CHAT_HISTORY.get(user_id, []))
         # detect user language, prefer stored preference if present
         stored = CHAT_PREFERRED_LANG.get(user_id)
         detected = _detect_user_language(message, CHAT_HISTORY.get(user_id, []))
@@ -298,6 +295,61 @@ def run_localloop_brain(user_id: str, message: str):
     # Normalize action shape: allow both {action_type, metadata} or earlier shape
     if action and not isinstance(action, dict):
         raise HTTPException(status_code=500, detail=f"AI action must be an object or null: {action}")
+
+    # Enforce ownership safety for item registration/disposal intents
+    # Default owner_id to the current user; if AI tried to set a different owner, require explicit confirmation.
+    confirmation_needed = False
+    confirmation_notes: list[str] = []
+    ownership_notice = None
+    if isinstance(action, dict):
+        act_type = action.get("action_type")
+        metadata = action.get("metadata") or {}
+        # register_item: ensure owner_id == user_id, or ask to confirm and nullify action
+        if intent in ("register_item", "offer_item") or act_type == "register_item":
+            if isinstance(metadata, dict):
+                owner = metadata.get("owner_id")
+                if owner is None:
+                    metadata["owner_id"] = user_id
+                    action["metadata"] = metadata
+                elif owner != user_id:
+                    # Hard rule: owner cannot be changed via chat; force to current user
+                    ownership_notice = f"Вы залогинены как '{user_id}'. Сменить владельца невозможно — будет установлен текущий аккаунт."
+                    metadata["owner_id"] = user_id
+                    action["metadata"] = metadata
+        # register_disposal_intent: iterate items
+        if intent in ("register_disposal_intent", "get_rid_of_items") or act_type == "register_disposal_intent":
+            items = []
+            if isinstance(metadata, dict):
+                items = metadata.get("items") or []
+            if isinstance(items, list) and items:
+                owner_mismatch_found = False
+                for idx, it in enumerate(items):
+                    if not isinstance(it, dict):
+                        continue
+                    owner = it.get("owner_id")
+                    if owner is None:
+                        it["owner_id"] = user_id
+                    elif owner != user_id:
+                        owner_mismatch_found = True
+                        it["owner_id"] = user_id
+                if owner_mismatch_found:
+                    ownership_notice = f"Вы залогинены как '{user_id}'. Сменить владельца невозможно — будет установлен текущий аккаунт."
+                # write back sanitized items
+                if isinstance(metadata, dict):
+                    metadata["items"] = items
+                    action["metadata"] = metadata
+
+    # Append ownership notice to reply when applicable
+    if ownership_notice:
+        reply = ((reply or "").strip() + "\n\n" + ownership_notice).strip()
+
+    # If confirmation is needed because of owner mismatch, nullify action and append a clear confirmation request to reply
+    if confirmation_needed:
+        # Build a concise, language-agnostic confirmation line leveraging the existing reply language
+        confirm_line = "\n\nOwner will be set to your account ('%s'). Confirm? yes/no" % user_id
+        # Preserve original reply but make sure the confirmation is visible
+        reply = (reply or "").strip() + confirm_line
+        action = None
 
     # Append the user's message and assistant reply to history, then trim
     # Strip leading greeting from assistant reply to avoid single-word greetings like 'Cześć!'

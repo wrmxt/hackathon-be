@@ -19,5 +19,7 @@ app.add_middleware(
     allow_headers=["*"],           # allow all headers
 )
 
+# State is cleaned on load and on persist in model/in_memmory_db; no startup hook needed.
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

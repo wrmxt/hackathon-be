@@ -1,8 +1,8 @@
 from ai.ai import run_localloop_brain, CHAT_HISTORY
 from domain.actions import apply_action, confirm_borrowing
 from main import app
-from model.in_memmory_db import BUILDING_STATE
-from model.models import ReturnBorrowingRequest, ChatRequest, ConfirmBorrowingRequest
+from model.in_memmory_db import BUILDING_STATE, persist
+from model.models import ReturnBorrowingRequest, ChatRequest, ConfirmBorrowingRequest, UpdateItemRequest, RequestBorrowingRequest
 from fastapi import HTTPException
 
 
@@ -78,7 +78,6 @@ def return_borrowing(req: ReturnBorrowingRequest):
             for item in BUILDING_STATE.get("items", []):
                 if item.get("id") == b.get("item_id"):
                     item["status"] = "available"
-            from model.in_memmory_db import persist
             persist()
             return {"status": "ok"}
     raise HTTPException(status_code=404, detail="Borrowing not found")
@@ -91,3 +90,111 @@ def confirm_borrowing_endpoint(req: ConfirmBorrowingRequest):
         return {"status": "ok", "borrowing": borrowing}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# PATCH /api/items/{item_id} - update own item (name, description, tags, status)
+# Constraints:
+# - Only owner can update.
+# - Cannot change status to available if there is an active borrowing.
+# - No updates allowed while item is borrowed (status=='borrowed').
+@app.patch("/api/items/{item_id}")
+def update_item(item_id: str, req: UpdateItemRequest):
+    # locate item
+    item = next((it for it in BUILDING_STATE.get("items", []) if it.get("id") == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if item.get("owner_id") != req.user_id:
+        raise HTTPException(status_code=403, detail="You can only modify your own items")
+
+    # check active borrowings for this item
+    active_borrow = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("item_id") == item_id and b.get("status") in ("active", "waiting_for_confirm")), None)
+    if active_borrow and req.status and req.status == "available":
+        # allow? if waiting_for_confirm and owner wants to mark unavailable maybe; disallow switching to available mid-borrow
+        raise HTTPException(status_code=400, detail="Cannot set status to available while borrowing is active or pending")
+    if item.get("status") == "borrowed":
+        raise HTTPException(status_code=400, detail="Cannot modify a borrowed item until it is returned")
+
+    # apply updates (only provided fields)
+    if req.name is not None:
+        item["name"] = req.name.strip() or item["name"]
+    if req.description is not None:
+        item["description"] = req.description
+    if req.tags is not None:
+        if not isinstance(req.tags, list):
+            raise HTTPException(status_code=400, detail="Tags must be a list of strings")
+        item["tags"] = req.tags
+    if req.status is not None:
+        if req.status not in ("available", "archived", "unavailable"):
+            raise HTTPException(status_code=400, detail="Invalid status")
+        item["status"] = req.status
+
+    persist()
+    return {"status": "ok", "item": item}
+
+# DELETE /api/items/{item_id}
+# Constraints:
+# - Only owner can delete.
+# - Cannot delete if item is borrowed or has active/pending borrowings.
+@app.delete("/api/items/{item_id}")
+def delete_item(item_id: str, user_id: str):
+    item = next((it for it in BUILDING_STATE.get("items", []) if it.get("id") == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if item.get("owner_id") != user_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own items")
+
+    # any borrowing referencing this item with status waiting/active/borrowed blocks deletion
+    blocking_statuses = {"waiting_for_confirm", "active", "borrowed"}
+    blocking = [b for b in BUILDING_STATE.get("borrowings", []) if b.get("item_id") == item_id and b.get("status") in blocking_statuses]
+    if blocking:
+        raise HTTPException(status_code=400, detail="Cannot delete item with active or pending borrowings")
+
+    # Remove the item
+    BUILDING_STATE["items"] = [it for it in BUILDING_STATE.get("items", []) if it.get("id") != item_id]
+    # Remove non-blocking borrowings tied to the item (returned, cancelled, or any other leftover)
+    BUILDING_STATE["borrowings"] = [b for b in BUILDING_STATE.get("borrowings", []) if b.get("item_id") != item_id]
+
+    persist()
+    return {"status": "ok"}
+
+@app.post("/api/borrowings/request")
+def request_borrowing(req: RequestBorrowingRequest):
+    # Validate item exists
+    item = next((it for it in BUILDING_STATE.get("items", []) if it.get("id") == req.item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    borrower_id = req.user_id
+    lender_id = item.get("owner_id")
+    if borrower_id == lender_id:
+        raise HTTPException(status_code=400, detail="Cannot borrow your own item")
+
+    # Check existing borrowings for conflicts (active or waiting)
+    conflict = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("item_id") == req.item_id and b.get("status") in ("active", "waiting_for_confirm")), None)
+    if conflict:
+        raise HTTPException(status_code=400, detail="Item already borrowed or pending confirmation")
+
+    # Basic date validation (optional: ensure start <= due)
+    start = req.start
+    due = req.due
+    if start and due and start > due:
+        raise HTTPException(status_code=400, detail="Start must be before due")
+
+    # Create borrowing in waiting_for_confirm
+    borrowing_id = f"borrowing-{len(BUILDING_STATE.get('borrowings', [])) + 1}"
+    borrowing = {
+        "id": borrowing_id,
+        "item_id": req.item_id,
+        "lender_id": lender_id,
+        "borrower_id": borrower_id,
+        "start": start,
+        "due": due,
+        "status": "waiting_for_confirm",
+    }
+    BUILDING_STATE.setdefault("borrowings", []).append(borrowing)
+
+    # Update item status to borrowed (reserved) for consistency
+    prev_status = item.get("status")
+    if prev_status in ("available", "unavailable"):
+        item["status"] = "borrowed"
+
+    persist()
+    return {"status": "ok", "borrowing": borrowing}
