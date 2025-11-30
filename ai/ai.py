@@ -269,7 +269,7 @@ def run_localloop_brain(user_id: str, message: str):
         resp = client.responses.create(
             model="gpt-4o-mini",
             input=combined_input,
-            temperature=0.9,
+            temperature=0.8,
             max_output_tokens=2000,
             # response_format={"type": "json_object"},
         )

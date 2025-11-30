@@ -1,4 +1,4 @@
-from ai.ai import run_localloop_brain, CHAT_HISTORY
+from ai.ai import run_localloop_brain, CHAT_HISTORY, CHAT_PREFERRED_LANG
 from domain.actions import apply_action, confirm_borrowing
 from main import app
 from model.in_memmory_db import BUILDING_STATE, persist
@@ -47,20 +47,80 @@ def post_chat(req: ChatRequest):
     confidence = brain_result.get("confidence")
 
     action_result = None
+    final_message = None
+    # Helper: format a concise final confirmation message for the user (localized)
+    def _format_final_message(result: dict, user_id: str, lang: str) -> str:
+        # Support a few common message types; fallback to a simple English summary.
+        r = result or {}
+        res = r.get("result")
+        if res == "borrow_waiting_confirmation":
+            bid = r.get("borrowing_id")
+            # lookup borrowing and item for extra detail
+            borrowing = next((b for b in BUILDING_STATE.get("borrowings", []) if b.get("id") == bid), None)
+            item = None
+            owner_name = None
+            if borrowing:
+                item = next((it for it in BUILDING_STATE.get("items", []) if it.get("id") == borrowing.get("item_id")), None)
+                owner = next((p for p in BUILDING_STATE.get("residents", []) if p.get("id") == borrowing.get("lender_id")), None)
+                owner_name = owner.get("name") if owner else borrowing.get("lender_id")
+            name = item.get("name") if item else "item"
+            if lang == "sk":
+                return f"Požiadavka bola vytvorená a poslaná vlastníkovi ({owner_name}) na potvrdenie. Položka: {name}. ID: {bid}."
+            return f"Your borrowing request was created and sent to {owner_name} for confirmation. Item: {name}. Request ID: {bid}."
+
+        if res == "item_registered":
+            item_id = r.get("item_id")
+            item = next((it for it in BUILDING_STATE.get("items", []) if it.get("id") == item_id), None)
+            name = item.get("name") if item else item_id
+            if lang == "sk":
+                return f"Položka '{name}' bola uložená v zozname (id={item_id})."
+            return f"Item '{name}' has been registered (id={item_id})."
+
+        if res == "disposal_registered":
+            created = r.get("created_items") or []
+            names = ", ".join([it.get("name") for it in created]) if created else None
+            if lang == "sk":
+                return f"Zaznamenané predmety na zber: {names or '(nie je uvedené)'}."
+            return f"Disposal intents registered for: {names or '(none)'}"
+
+        if res == "marked_returned":
+            bid = r.get("borrowing_id")
+            if lang == "sk":
+                return f"Vrátenie bolo zaregistrované (id: {bid}). Vďaka!"
+            return f"Return recorded (id: {bid}). Thank you!"
+
+        # error or unknown
+        err = r.get("error") or r.get("message")
+        if err:
+            if lang == "sk":
+                return f"Akcia nebola vykonaná: {err}"
+            return f"Action not completed: {err}"
+        # generic fallback
+        if lang == "sk":
+            return "Akcia bola vykonaná."
+        return "Action completed."
+
     # Apply action to BUILDING_STATE if present
     if action:
         # Optionally, one could check confidence here; for now we apply all actions returned by the model.
         try:
             action_result = apply_action(req.user_id, intent, action)
-            # If the action changed state (backend returned a truthy result), clear the user's chat history
+            # If the action changed state (backend returned a truthy result), prepare final confirmation message
             if action_result:
-                # remove whole conversation context for this user to avoid accidental reuse
-                CHAT_HISTORY.pop(req.user_id, None)
+                user_lang = CHAT_PREFERRED_LANG.get(req.user_id, "en")
+                final_message = _format_final_message(action_result, req.user_id, user_lang)
+                # Replace the user's conversation context with a single assistant final message.
+                # This keeps the final confirmation visible in history but removes prior context.
+                try:
+                    CHAT_HISTORY.pop(req.user_id, None)
+                except KeyError:
+                    pass
+                CHAT_HISTORY[req.user_id] = [{"role": "assistant", "content": final_message}]
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to apply action: {e}")
     # If no action was returned, simply reply (AI may ask follow-up questions); do not auto-register items.
 
-    return {"reply": reply, "intent": intent, "confidence": confidence, "action_result": action_result}
+    return {"reply": reply, "intent": intent, "confidence": confidence, "action_result": action_result, "final_message": final_message}
 
 
 @app.get("/api/items")
