@@ -10,18 +10,27 @@
       "id": "anna",
       "name": "Anna",
       "floor": 3,
+      "flat": 12,
+      "email": "anna@example.com",
+      "phone": "+421 900 111 222",
       "trusted_score": 0.9
     },
     {
       "id": "peter",
       "name": "Peter",
       "floor": 5,
+      "flat": 18,
+      "email": "peter@example.com",
+      "phone": "+421 900 222 333",
       "trusted_score": 0.8
     },
     {
       "id": "jana",
       "name": "Jana",
       "floor": 2,
+      "flat": 7,
+      "email": "jana@example.com",
+      "phone": "+421 900 333 444",
       "trusted_score": 0.7
     }
   ],
@@ -48,7 +57,7 @@
         "drill"
       ],
       "owner_id": "jana",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -61,7 +70,7 @@
         "ladder"
       ],
       "owner_id": "anna",
-      "status": "available",
+      "status": "borrowed",
       "created_at": "2025-11-29T00:00:00+00:00",
       "risk_level": "low"
     },
@@ -110,6 +119,39 @@
       "owner_id": "peter",
       "status": "available",
       "created_at": "2025-11-29T20:06:23.384415+00:00"
+    },
+    {
+      "id": "item-8",
+      "name": "Drill",
+      "description": "Cordless drill",
+      "tags": [
+        "tools",
+        "drill"
+      ],
+      "owner_id": "peter",
+      "status": "available",
+      "created_at": "2025-11-30T02:35:21.073468+00:00"
+    },
+    {
+      "id": "item-9",
+      "name": "Drill",
+      "description": "Cordless drill",
+      "tags": [
+        "tools",
+        "drill"
+      ],
+      "owner_id": "anna",
+      "status": "available",
+      "created_at": "2025-11-30T02:44:11.203330+00:00"
+    },
+    {
+      "id": "item-10",
+      "name": "Bottle",
+      "description": "",
+      "tags": [],
+      "owner_id": "anna",
+      "status": "borrowed",
+      "created_at": "2025-11-30T02:51:51.373545+00:00"
     }
   ],
   "borrowings": [
@@ -129,7 +171,25 @@
       "borrower_id": "peter",
       "start": "2025-11-30T00:00:00",
       "due": "2025-11-30T23:59:59",
-      "status": "waiting_for_confirm"
+      "status": "active"
+    },
+    {
+      "id": "borrowing-3",
+      "item_id": "item-3",
+      "lender_id": "anna",
+      "borrower_id": "peter",
+      "start": "2025-11-30T00:00:00",
+      "due": "2025-11-30T23:59:59",
+      "status": "active"
+    },
+    {
+      "id": "borrowing-4",
+      "item_id": "item-10",
+      "lender_id": "anna",
+      "borrower_id": "peter",
+      "start": "2025-11-30T00:00:00",
+      "due": "2025-11-30T23:59:59",
+      "status": "active"
     }
   ],
   "events": [
@@ -177,11 +237,11 @@
     }
   ],
   "impact": {
-    "co2_saved_kg": 29.0,
-    "waste_avoided_kg": 10.0,
-    "borrows_count": 1,
+    "co2_saved_kg": 39.0,
+    "waste_avoided_kg": 15.0,
+    "borrows_count": 6,
     "events_count": 3,
-    "items_shared": 7
+    "items_shared": 10
   },
   "disposal_intents": [
     {
@@ -194,6 +254,24 @@
       "owner_id": "peter",
       "status": "for_disposal",
       "created_at": "2025-11-29T20:49:54.435289+00:00"
+    },
+    {
+      "id": "disposal-2",
+      "name": "Old skis",
+      "description": "Adidas old skis",
+      "tags": [],
+      "owner_id": "peter",
+      "status": "for_disposal",
+      "created_at": "2025-11-30T04:04:49.185222+00:00"
+    },
+    {
+      "id": "disposal-3",
+      "name": "Old skis",
+      "description": "Adidas old skis",
+      "tags": [],
+      "owner_id": "peter",
+      "status": "for_disposal",
+      "created_at": "2025-11-30T04:04:50.932091+00:00"
     }
   ]
 }
